@@ -96,7 +96,8 @@ function decimals() override public pure returns (uint8) {
     return 0;
 }
 ```
+This function overrides the `decimals` function to return 0, meaning the token is indivisible.
+
 # Owner
 
 Eduard Casidsid
-This function overrides the `decimals` function to return 0, meaning the token is indivisible.
