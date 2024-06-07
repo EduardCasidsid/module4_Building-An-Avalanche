@@ -1,63 +1,38 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ClothingLine is ERC20, Ownable {
+contract Degen is ERC20, Ownable {
+    mapping(uint256 => uint256) public itemPrices;
 
-    mapping(uint256 => uint256) public Clothes;
-    mapping(address => uint256) public RedeemedClothes;
-
-    constructor() ERC20("Cellphone", "Type") Ownable(msg.sender) {
-        Clothes[1] = 400; // Small
-        Clothes[2] = 600; // Medium
-        Clothes[3] = 800; // Large
-        
-    }
-
-    function mint(address _to, uint256 _amount) public onlyOwner {
-        _mint(_to, _amount);
-    }
-
-    function C_transfer(address _to, uint256 _amount) public {
-        require(balanceOf(msg.sender) >= _amount, "Transfer Failed: Insufficient balance.");
-        approve(msg.sender, _amount);
-        transferFrom(msg.sender, _to, _amount);
-    }
-
-    function typesofCellphones() external pure returns (string memory) {
-        string memory saleOptions = " Clothes: {1} Small (400) {2} Medium (600) {3} Large (800)" ;
-        return saleOptions;
-    }
-
-    function redeem(uint256 _amount) public {
-        require(Clothes[_amount] > 0, "Clothes is not available");
-        require(_amount <= 3, "Invalid Clothes selection");
-        require(balanceOf(msg.sender) >= Clothes[_amount], "Redeem Failed: Insufficient balance.");
-
-        // Transfer the cellphone to the redeemer
-        RedeemedClothes[msg.sender] += _amount;
-
-        // Burn the corresponding tokens
-        _burn(msg.sender, Clothes[_amount]);
+    constructor() ERC20("Degen", "DGN") Ownable(msg.sender) {
+        _mint(msg.sender, 1000000 * (10 ** decimals())); // Minting 1,000,000 tokens with decimals taken into account
     }
     
-    function burn(uint256 _amount) public {
-        require(balanceOf(msg.sender) >= _amount, "Burn Failed: Insufficient balance.");
-        approve(msg.sender, _amount);
-        _burn(msg.sender, _amount);
+    function mint(address account, uint256 amount) public {
+        require(msg.sender == owner(), "Only owner can mint new tokens");
+        _mint(account, amount);
     }
-
-    function getBalance() external view returns (uint256) {
-        return balanceOf(msg.sender);
+    
+    function burn(uint256 amount) public {
+        _burn(msg.sender, amount);
     }
-
-    function getRedeemedCellphones(address _user) external view returns (uint256) {
-        return RedeemedClothes[_user];
+    
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        require(to != address(0), "DGN: transfer to the zero address");
+        return super.transfer(to, amount);
+    }   
+    
+    function redeemItems(uint256 itemId, uint256 price) external onlyOwner {
+        itemPrices[itemId] = price;
     }
-
-    function decimals() override public pure returns (uint8) {
-        return 0;
+    
+    function redeem(uint256 itemId) public {
+        uint256 price = itemPrices[itemId];
+        require(price > 0, "DGN: Item not available for redemption");
+        require(balanceOf(msg.sender) >= price, "DGN: Insufficient balance");
+        _burn(msg.sender, price);
     }
 }
