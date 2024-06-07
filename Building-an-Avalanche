@@ -1,1 +1,144 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract MyClothingline is IERC20, Ownable {
+    using SafeMath for uint256;
+
+    string public name;
+    uint256 private _totalSupply;
+
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    struct Item {
+        string name;
+        uint256 price;
+        bool available;
+    }
+
+    Item[] public items;
+    mapping(address => Item[]) public redeemedItems;
+
+    constructor(string memory _name, address initialOwner) Ownable(initialOwner) {
+        name = _name;
+        _balances[msg.sender] = _totalSupply;
+        emit Transfer(address(0), msg.sender, _totalSupply);
+
+        // Items
+        items.push(Item({ name: "Nike", price: 10000, available: true }));
+        items.push(Item({ name: "Essentials", price: 11000, available: true }));
+        items.push(Item({ name: "Gucci", price: 15000, available: true }));
+    }
+
+    function totalSupply() public view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view override returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address recipient, uint256 amount) public override returns (bool) {
+        _transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function allowance(address owner, address spender) public view override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) public override returns (bool) {
+        _approve(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
+        _transfer(sender, recipient, amount);
+        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        return true;
+    }
+
+    function _transfer(address sender, address recipient, uint256 amount) internal {
+        require(sender != address(0), "ERC20: transfer from the zero address");
+        require(recipient != address(0), "ERC20: transfer to the zero address");
+
+        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
+        _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender, recipient, amount);
+    }
+
+    function _approve(address owner, address spender, uint256 amount) internal {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function mint(address account, uint256 amount) public onlyOwner {
+        _mint(account, amount);
+    }
+
+    function _mint(address account, uint256 amount) internal {
+        require(account != address(0), "ERC20: mint to the zero address");
+
+        _totalSupply = _totalSupply.add(amount);
+        _balances[account] = _balances[account].add(amount);
+        emit Transfer(address(0), account, amount);
+    }
+
+    function redeem(uint256 itemIndex) public {
+        require(itemIndex < items.length, "Invalid item index");
+        Item storage item = items[itemIndex];
+        require(item.available, "Item is not available");
+        require(_balances[msg.sender] >= item.price, "Insufficient balance to redeem item");
+
+        // Transfer the tokens from the sender to the contract owner
+        _transfer(msg.sender, owner(), item.price);
+
+        // Increase total supply by the item's price
+        _mint(owner(), item.price);
+
+        // Mark the item as unavailable
+        item.available = false;
+
+        // Add the redeemed item to the sender's redeemed items list
+        redeemedItems[msg.sender].push(item);
+    }
+
+    function burn(uint256 amount) public {
+        require(_balances[msg.sender] >= amount, "Insufficient balance to burn");
+
+        _balances[msg.sender] = _balances[msg.sender].sub(amount, "Burn amount exceeds balance");
+        _totalSupply = _totalSupply.sub(amount);
+        emit Transfer(msg.sender, address(0), amount);
+    }
+
+    function getAvailableItems() public view returns (Item[] memory) {
+        uint256 availableCount = 0;
+        for (uint256 i = 0; i < items.length; i++) {
+            if (items[i].available) {
+                availableCount++;
+            }
+        }
+
+        Item[] memory availableItems = new Item[](availableCount);
+        uint256 j = 0;
+        for (uint256 i = 0; i < items.length; i++) {
+            if (items[i].available) {
+                availableItems[j] = items[i];
+                j++;
+            }
+        }
+
+        return availableItems;
+    }
+
+    function getRedeemedItems(address account) public view returns (Item[] memory) {
+        return redeemedItems[account];
+    }
+}
