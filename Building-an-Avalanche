@@ -7,35 +7,40 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract ClothingLine is ERC20, Ownable {
 
     mapping(uint256 => uint256) public Clothes;
+    mapping(address => uint256) public RedeemedClothes;
 
-    constructor() ERC20("Clothes", "Size") Ownable(msg.sender) {
+    constructor() ERC20("Cellphone", "Type") Ownable(msg.sender) {
         Clothes[1] = 400; // Small
         Clothes[2] = 600; // Medium
         Clothes[3] = 800; // Large
-        Clothes[4] = 1000; // Extra Large
-       
+        
     }
 
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
     }
 
-    function transfersize(address _to, uint256 _amount) public {
+    function C_transfer(address _to, uint256 _amount) public {
         require(balanceOf(msg.sender) >= _amount, "Transfer Failed: Insufficient balance.");
         approve(msg.sender, _amount);
         transferFrom(msg.sender, _to, _amount);
     }
 
-    function sizes() external pure returns (string memory) {
-        string memory saleOptions = " Clothes: {1} Small (400) {2} Medium(600) {3} Large (800) {4} Extra Large (1000)" ;
+    function typesofCellphones() external pure returns (string memory) {
+        string memory saleOptions = " Clothes: {1} Small (400) {2} Medium (600) {3} Large (800)" ;
         return saleOptions;
     }
 
     function redeem(uint256 _amount) public {
-        require( Clothes[_amount] > 0, " Clothes is not enough");
-        require(_amount <= 3, " Clothes is not enough.");
-        require(balanceOf(msg.sender) >=  Clothes[_amount], "Redeem Failed: Insufficient balance.");
-        transfer(owner(),  Clothes[_amount]);
+        require(Clothes[_amount] > 0, "Clothes is not available");
+        require(_amount <= 3, "Invalid Clothes selection");
+        require(balanceOf(msg.sender) >= Clothes[_amount], "Redeem Failed: Insufficient balance.");
+
+        // Transfer the cellphone to the redeemer
+        RedeemedClothes[msg.sender] += _amount;
+
+        // Burn the corresponding tokens
+        _burn(msg.sender, Clothes[_amount]);
     }
     
     function burn(uint256 _amount) public {
@@ -45,7 +50,11 @@ contract ClothingLine is ERC20, Ownable {
     }
 
     function getBalance() external view returns (uint256) {
-        return this.balanceOf(msg.sender);
+        return balanceOf(msg.sender);
+    }
+
+    function getRedeemedCellphones(address _user) external view returns (uint256) {
+        return RedeemedClothes[_user];
     }
 
     function decimals() override public pure returns (uint8) {
