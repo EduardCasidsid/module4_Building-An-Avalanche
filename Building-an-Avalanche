@@ -1,136 +1,223 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import atm_abi from "../artifacts/contracts/Assessment.sol/Assessment.json";
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+export default function HomePage() {
+  const [ethWallet, setEthWallet] = useState(undefined);
+  const [account, setAccount] = useState(undefined);
+  const [atm, setATM] = useState(undefined);
+  const [balance, setBalance] = useState(undefined);
+  const [transactionHistory, setTransactionHistory] = useState([]);
+  const [interestRate, setInterestRate] = useState(undefined);
+  const [loanAmount, setLoanAmount] = useState(0); // Added loan amount state
+  const [paidLoan, setPaidLoan] = useState(false); // Added state for paid loan
+  const [recipientAddress, setRecipientAddress] = useState(""); // State for recipient address
+  const [amountToSend, setAmountToSend] = useState(""); // State for amount to send
 
-contract MyClothingline is IERC20, Ownable {
-    using SafeMath for uint256;
+  const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Update with actual address
+  const atmABI = atm_abi.abi;
 
-    string public name;
-    uint256 private _totalSupply;
+  const getWallet = async () => {
+    if (window.ethereum) {
+      setEthWallet(new ethers.providers.Web3Provider(window.ethereum));
+    }
+  };
 
-    mapping(address => uint256) private _balances;
-    mapping(address => mapping(address => uint256)) private _allowances;
+  const handleAccount = async () => {
+    if (ethWallet) {
+      const accounts = await ethWallet.listAccounts();
+      if (accounts.length > 0) {
+        console.log("Account connected: ", accounts[0]);
+        setAccount(accounts[0]);
+        getATMContract();
+      } else {
+        console.log("No account found");
+      }
+    }
+  };
 
-    struct Item {
-        string name;
-        uint256 price;
-        bool available;
+  const connectAccount = async () => {
+    try {
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      handleAccount();
+    } catch (error) {
+      console.error("Error connecting account:", error);
+    }
+  };
+
+  const getATMContract = async () => {
+    const network = await ethWallet.getNetwork();
+    console.log("Network:", network);
+    if (network.chainId === 1337 || network.chainId === 31337) {
+      // Localhost or Hardhat network
+      const signer = ethWallet.getSigner();
+      const atmContract = new ethers.Contract(contractAddress, atmABI, signer);
+      setATM(atmContract);
+    } else {
+      console.error("Unsupported network");
+    }
+  };
+
+  const getBalance = async () => {
+    if (atm) {
+      try {
+        const balance = await atm.getBalance();
+        setBalance(balance.toNumber());
+        console.log("Balance fetched: ", balance.toNumber());
+      } catch (error) {
+        console.error("Error fetching balance:", error);
+      }
+    }
+  };
+
+  const executeTransaction = async (transaction) => {
+    try {
+      const receipt = await transaction.wait();
+      console.log("Transaction hash:", receipt.transactionHash);
+      console.log("Gas used:", receipt.gasUsed.toString());
+      console.log("Block number:", receipt.blockNumber);
+      console.log("Confirmations:", receipt.confirmations);
+      getBalance();
+      // Add transaction to history
+      setTransactionHistory([...transactionHistory, receipt]);
+    } catch (error) {
+      console.error("Transaction error:", error);
+    }
+  };
+
+  const deposit = async () => {
+    if (atm) {
+      try {
+        const tx = await atm.deposit(1000);
+        executeTransaction(tx);
+      } catch (error) {
+        console.error("Error depositing:", error);
+      }
+    }
+  };
+
+  const withdraw = async () => {
+    if (atm) {
+      try {
+        const tx = await atm.withdraw(500);
+        executeTransaction(tx);
+      } catch (error) {
+        console.error("Error withdrawing:", error);
+      }
+    }
+  };
+
+  const changeLoanAmount = (percentage) => {
+    const newLoanAmount = balance * (percentage / 100);
+    setLoanAmount(newLoanAmount);
+  };
+
+  const payLoan = () => {
+    if (balance >= loanAmount) {
+      const newBalance = balance - loanAmount;
+      setBalance(newBalance);
+      setPaidLoan(true);
+    } else {
+      console.log("Insufficient funds to pay the loan.");
+    }
+  };
+
+  const handleRecipientChange = (event) => {
+    setRecipientAddress(event.target.value);
+  };
+
+  const handleAmountChange = (event) => {
+    setAmountToSend(event.target.value);
+  };
+
+  const transferETH = async () => {
+    if (!ethers.utils.isAddress(recipientAddress)) {
+      console.error("Invalid recipient address");
+      return;
     }
 
-    Item[] public items;
-
-    constructor(string memory _name, address initialOwner) Ownable(initialOwner) {
-        name = _name;
-        _balances[msg.sender] = _totalSupply;
-        emit Transfer(address(0), msg.sender, _totalSupply);
-
-        // Items
-        items.push(Item({ name: "Nike", price: 10000, available: true }));
-        items.push(Item({ name: "Gucci", price: 11000, available: true }));
-        items.push(Item({ name: "Essentials", price: 15000, available: true }));
+    if (isNaN(amountToSend) || Number(amountToSend) <= 0) {
+      console.error("Invalid amount to send");
+      return;
     }
 
-    function totalSupply() public view override returns (uint256) {
-        return _totalSupply;
+    try {
+      const signer = ethWallet.getSigner();
+      const tx = await signer.sendTransaction({
+        to: recipientAddress,
+        value: ethers.utils.parseEther(amountToSend),
+      });
+      executeTransaction(tx);
+    } catch (error) {
+      console.error("Error sending ETH:", error);
+    }
+  };
+
+  const initUser = () => {
+    if (!ethWallet) {
+      return <p>Please install Metamask in order to use this ATM</p>;
     }
 
-    function balanceOf(address account) public view override returns (uint256) {
-        return _balances[account];
+    if (!account) {
+      return <button onClick={() => connectAccount()}>Please connect your Metamask wallet</button>;
     }
 
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
-        _transfer(msg.sender, recipient, amount);
-        return true;
+    if (balance === undefined) {
+      getBalance();
     }
 
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
-    }
+    return (
+      <div>
+        <p>Your Account: {account}</p>
+        <p>Your Balance: {balance}</p>
+        <button onClick={deposit}>Deposit 1000</button>
+        <button onClick={withdraw}>Withdraw 500 ETH</button>
+        <div>
+          <button onClick={() => changeLoanAmount(20)}>Set Loan to 20%</button>
+          <button onClick={() => changeLoanAmount(40)}>Set Loan to 40%</button>
+        </div>
+        {paidLoan ? (
+          <p>Loan has been paid.</p>
+        ) : (
+          <div>
+            <p>Loan Amount: {loanAmount}</p>
+            <button onClick={payLoan}>Pay Loan</button>
+          </div>
+        )}
+        <div>
+          <input
+            type="text"
+            value={recipientAddress}
+            onChange={handleRecipientChange}
+            placeholder="Recipient Address"
+          />
+          <input
+            type="text"
+            value={amountToSend}
+            onChange={handleAmountChange}
+            placeholder="Amount to Send"
+          />
+          <button onClick={transferETH}>Transfer ETH</button>
+        </div>
+      </div>
+    );
+  };
 
-    function approve(address spender, uint256 amount) public override returns (bool) {
-        _approve(msg.sender, spender, amount);
-        return true;
-    }
+  useEffect(() => {
+    getWallet();
+  }, []);
 
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
-        _transfer(sender, recipient, amount);
-        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "ERC20: transfer amount exceeds allowance"));
-        return true;
-    }
-
-    function _transfer(address sender, address recipient, uint256 amount) internal {
-        require(sender != address(0), "ERC20: transfer from the zero address");
-        require(recipient != address(0), "ERC20: transfer to the zero address");
-
-        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
-        _balances[recipient] = _balances[recipient].add(amount);
-        emit Transfer(sender, recipient, amount);
-    }
-
-    function _approve(address owner, address spender, uint256 amount) internal {
-        require(owner != address(0), "ERC20: approve from the zero address");
-        require(spender != address(0), "ERC20: approve to the zero address");
-
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
-    }
-
-    function mint(address account, uint256 amount) public onlyOwner {
-        _mint(account, amount);
-    }
-
-    function _mint(address account, uint256 amount) internal {
-        require(account != address(0), "ERC20: mint to the zero address");
-
-        _totalSupply = _totalSupply.add(amount);
-        _balances[account] = _balances[account].add(amount);
-        emit Transfer(address(0), account, amount);
-    }
-
-    function redeem(uint256 itemIndex) public {
-        require(itemIndex < items.length, "Invalid item index");
-        Item storage item = items[itemIndex];
-        require(item.available, "Item is not available");
-        require(_balances[msg.sender] >= item.price, "Insufficient balance to redeem item");
-
-        // Transfer the tokens from the sender to the contract owner
-        _transfer(msg.sender, owner(), item.price);
-
-        // Increase total supply by the item's price
-        _mint(owner(), item.price);
-
-        // Mark the item as unavailable
-        item.available = false;
-    }
-
-    function burn(uint256 amount) public {
-        require(_balances[msg.sender] >= amount, "Insufficient balance to burn");
-
-        _balances[msg.sender] = _balances[msg.sender].sub(amount, "Burn amount exceeds balance");
-        _totalSupply = _totalSupply.sub(amount);
-        emit Transfer(msg.sender, address(0), amount);
-    }
-
-    function getAvailableItems() public view returns (Item[] memory) {
-        uint256 availableCount = 0;
-        for (uint256 i = 0; i < items.length; i++) {
-            if (items[i].available) {
-                availableCount++;
-            }
+  return (
+    <main className="container">
+      <header>
+        <h1>WELCOME TO MY LOAN ACCOUNT</h1>
+      </header>
+      {initUser()}
+      <style jsx>{`
+        .container {
+          text-align: center;
         }
-
-        Item[] memory availableItems = new Item[](availableCount);
-        uint256 j = 0;
-        for (uint256 i = 0; i < items.length; i++) {
-            if (items[i].available) {
-                availableItems[j] = items[i];
-                j++;
-            }
-        }
-
-        return availableItems;
-    }
+      `}</style>
+    </main>
+  );
 }
